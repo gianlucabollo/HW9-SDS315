@@ -1,0 +1,119 @@
+---
+title: "SDS HW 9"
+author: "Gianluca Bollo (gb25625) - https://github.com/gianlucabollo/HW9-SDS315"
+date: "4/18/2024"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 8, fig.height = 5)
+```
+
+```{r import packages and data}
+library(tidyverse)
+library(mosaic)
+library(moderndive)
+library(MatchIt)
+turnout = read.csv('turnout.csv')
+solder = read.csv('solder.csv')
+```
+
+# \centering How much more likely are GOTV call recipients to have voted in 1998? Preliminary Analysis:
+
+```{r, Q1A}
+prop(voted1998~GOTV_call, data = turnout)
+boot_prop = do(10000)*{
+  diffprop(voted1998~GOTV_call, data = resample(turnout))
+}
+confint(boot_prop, level = 0.95)
+```
+
+# \centering Consider the voted1996, AGE, and MAJORPTY variables. Provide evidence that at all three of these variables are confounders.
+
+```{r, Q1B}
+voted_1996_summ = turnout %>%
+  group_by(voted1996) %>%
+  summarize(prop_voted_1998 = mean(voted1998),
+            prop_gotv_call = mean(GOTV_call))
+voted_1996_summ
+
+majorpty_summ = turnout %>%
+  group_by(MAJORPTY) %>%
+  summarize(prop_voted_1998 = mean(voted1998),
+            prop_gotv_call = mean(GOTV_call))
+majorpty_summ
+
+ggplot(turnout) +
+  geom_boxplot(aes(x=AGE, y = factor(voted1998)))
+
+ggplot(turnout) +
+  geom_boxplot(aes(x=AGE, y = factor(GOTV_call)))
+```
+
+# \centering Use matching to construct a data set with GOTV_call as our treatment variable, and with voted1996, AGE,and MAJORPTY as our "matching" or "balancing" variables. Use 5 control cases for each treated case in your matching (ratio=5). Provide evidence that your "matched" data set is, indeed, balanced with respect to the three confounders of voted1996, AGE, and MAJORPTY. (That is, show that these variables are no longer confounders for the matched data.) Then repeat your analysis from Part A, except using the matched data only.
+
+```{r, Q1C}
+gotv_match = matchit(GOTV_call ~ AGE + factor(voted1996) + factor(MAJORPTY), data = turnout, ratio=5)
+gotv_matched = match.data(gotv_match)
+
+voted_1996_summ2 = gotv_matched %>%
+  group_by(voted1996) %>%
+  summarize(prop_voted_1998 = mean(voted1998),
+            prop_gotv_call = mean(GOTV_call))
+voted_1996_summ2
+
+majorpty_summ2 = gotv_matched %>%
+  group_by(MAJORPTY) %>%
+  summarize(prop_voted_1998 = mean(voted1998),
+            prop_gotv_call = mean(GOTV_call))
+majorpty_summ2
+
+ggplot(gotv_matched) +
+  geom_boxplot(aes(x=AGE, y = factor(voted1998)))
+
+ggplot(gotv_matched) +
+  geom_boxplot(aes(x=AGE, y = factor(GOTV_call)))
+
+prop(voted1998~GOTV_call, data = gotv_matched)
+boot_prop2 = do(10000)*{
+  diffprop(voted1998~GOTV_call, data = resample(gotv_matched))
+}
+confint(boot_prop2, level = 0.95)
+```
+
+\centering Upon using a matched dataset and removing the effects of identified confounders, I proceeded to investigate the effect of a GOTV call on the likelihood of voting in the 1998 election. To do this, I calculated the confidence interval for the proportions of voting in 1998 (voted1998==1) for those who received a GOTV call versus those who didn't. As shown above, the interval does not contain 0, which deem the results significantly significant. In terms of practicality and making my own conclusion, I believe to a small degree that people receiving GOTV calls were more likely to go vote than those who didnt recieve the call. However, I would not be so sure to conclude that this observed difference is purely due to the call, as there may be other confounders or reasons that contribute to this difference not accounted for in this analysis.
+
+# \centering Make two plots. The first plot should provide evidence that the size of the opening on the solder gun is related to the number of skips. The second should provide evidence that the thickness of the alloy used for soldering is related to the number of skips. Give each plot an informative caption describing what is shown in the plot.
+
+```{r, Q2A}
+ggplot(solder) + geom_col(aes(x = Opening, y = skips)) + labs(title = 'Solder skip frequency modeled by solder gun opening thickness')
+
+ggplot(solder) + geom_col(aes(x = Solder, y = skips)) + labs(title = 'Solder skip frequency modeled by alloy thickness')
+```
+
+# \centering Build a regression model and table for the given outcome and predictor variables.
+
+```{r, Q2B}
+skips_model = lm(skips ~ Opening + Solder + Opening:Solder, data = solder)
+skips_model
+get_regression_table(skips_model, conf.level = 0.95, digits=2)
+
+
+```
+
+-   The baseline number of skips for circuit boards that were manufactured with large-opening solder gun and thick alloy is .39.
+
+-   The main effect for a medium opening in a solder gun is 2.41 skips. This is the effect of a medium-opening solder gun in isolation.
+
+-   The main effect for a small opening in a solder gun is 5.13 skips. This is the effect of a small-opening solder gun in isolation.
+
+-   The main effect for a using thin alloy when soldering is 2.28 skips. This is the effect of a thin-alloy in isolation.
+
+-   The interaction effect for a medium-opening solder gun and thin alloy is -0.74 skips. This means that circuit boards constructed from thin alloy and a medium-opening solder gun yield 0.74 less skips than if you were to sum both of the individual effects of the variables.
+
+-   The interaction effect for a small-opening solder gun and thin alloy is 9.65 skips. This means that circuit boards constructed from thin alloy and a small-opening solder gun yield 9.65 more skips than if you were to sum both of the individual effects of the variables.
+
+# \centering If you had to recommend a combination of Opening size and Solder thickness to AT&T based on this analysis, which one would it be, and why? (Remember, the goal is to minimize the number of skips in the manufacturing process.)
+If I had to recommend a combination of Opening size and Solder thickness to AT&T based on this analysis, I would recommend the combination of using thick alloy and a large-opening solder gun. As seen from the above table, this combination is the baseline, and all other combinations yield a higher amount of skips. Due to the primarily positive estimated results and confidence intervals of the main and interaction effects, it is evident that the combination of thick alloy and a large-opening solder gun is the best combination when trying to minimize solder skips.
